@@ -3,7 +3,7 @@
         "description":  null,
         "translateDescription":  false,
         "inputFieldType":  1,
-        "key":  "externalemailaddress",
+        "key":  "mailaddress",
         "type":  0,
         "options":  1
     }

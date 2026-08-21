@@ -1,60 +1,98 @@
-<!-- Description -->
+# HelloID-Conn-SA-Full-Exchange-On-Premises-Mailcontact-Create
+
+| :information_source: Information                                                                                                                                                                                                                                                                                                                                                          |
+| :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This repository contains the connector and configuration code only. The implementer is responsible for acquiring the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
+
 ## Description
-This HelloID Service Automation Delegated Form provides the functionality to create Mail Contacts in Exchange On-premise
 
- 1. Enter the details of the mailcontact you would like to create.
- 2. The form will search within all e-mailaddresses if the given external e-mailaddress is not already being used.
- 3. The mail contact will be created.
+_HelloID-Conn-SA-Full-Exchange-On-Premises-Mailcontact-Create_ is a template designed for use with HelloID Service Automation (SA) Delegated Forms. It can be imported into HelloID and customized according to your requirements.
 
-## Versioning
-| Version | Description | Date |
-| - | - | - |
-| 1.0.0   | Initial release | 2023/08/17  |
+By using this delegated form, you can create mail contacts in Exchange On-Premises. The following workflow is available:
 
-<!-- TABLE OF CONTENTS -->
-## Table of Contents
-* [Description](#description)
-* [All-in-one PowerShell setup script](#all-in-one-powershell-setup-script)
-  * [Getting started](#getting-started)
-* [Post-setup configuration](#post-setup-configuration)
-* [Manual resources](#manual-resources)
+1.  Enter the details for the new mail contact (first name, initials, last name, display name, alias, and external email address)
+2.  The form validates that the display name is unique and not already in use
+3.  The form validates that the alias is unique and not already in use
+4.  The form validates that the external email address is unique and not already in use
+5.  Upon successful validation, the mail contact is created in Exchange On-Premises
+6.  The mail contact address list visibility is configured based on the selected option
 
+## Getting started
 
-## All-in-one PowerShell setup script
-The PowerShell script "createform.ps1" contains a complete PowerShell script using the HelloID API to create the complete Form including user defined variables, tasks and data sources.
+### Requirements
 
- _Please note that this script asumes none of the required resources do exists within HelloID. The script does not contain versioning or source control_
+- **Exchange On-Premises Server**:<br>
+  A functioning Exchange On-Premises environment with PowerShell remote management enabled. The Exchange server must be accessible from the HelloID agent.
+- **Active Directory Organizational Unit**:<br>
+  An organizational unit (OU) in Active Directory where mail contacts will be created. The service account must have permissions to create objects in this OU.
+- **PowerShell Remoting**:<br>
+  PowerShell remoting must be enabled on the Exchange server. The Exchange Management Shell must be accessible via remote PowerShell session.
+- **Service Account Permissions**:<br>
+  A service account with sufficient permissions to create and manage mail contacts in Exchange On-Premises. The account must have access to the Exchange Management Shell cmdlets and the specified organizational unit.
 
+### Connection settings
 
-### Getting started
-Please follow the documentation steps on [HelloID Docs](https://docs.helloid.com/hc/en-us/articles/360017556559-Service-automation-GitHub-resources) in order to setup and run the All-in one Powershell Script in your own environment.
+The following user-defined variables are used by the connector.
 
+| Setting               | Description                                             | Mandatory |
+| --------------------- | ------------------------------------------------------- | --------- |
+| ExchangeConnectionUri | The URI to the Exchange On-Premises PowerShell endpoint | Yes       |
+| ExchangeAdminUsername | The username for the Exchange administrator account     | Yes       |
+| ExchangeAdminPassword | The password for the Exchange administrator account     | Yes       |
+| ADMailContactsOU      | The organizational unit where mail contacts are created | Yes       |
 
-## Post-setup configuration
-After the all-in-one PowerShell script has run and created all the required resources. The following items need to be configured according to your own environment
- 1. Update the following [user defined variables](https://docs.helloid.com/hc/en-us/articles/360014169933-How-to-Create-and-Manage-User-Defined-Variables)
-<table>
-  <tr><td><strong>Variable name</strong></td><td><strong>Example value</strong></td><td><strong>Description</strong></td></tr>
-  <tr><td>ExchangeConnectionUri</td><td>********</td><td>Exchange server URI</td></tr>
-  <tr><td>ExchangeAdminUsername</td><td>domain/user</td><td>Exchange server admin account</td></tr>
-  <tr><td>ExchangeAdminPassword</td><td>********</td><td>Exchange server admin password</td></tr>  
-  
-</table>
+## Remarks
 
-## Manual resources
-This Delegated Form uses the following resources in order to run
+### Authentication Method
 
-### Powershell data source '[powershell-datasource]_Exchange-mailcontact-create-check-names'
-This Powershell data source runs a query to search for the use of the external e-mailaddress.
+The connector uses Default authentication instead of Kerberos for better compatibility across different Exchange configurations. Ensure that the service account has appropriate permissions and that the Exchange server accepts Default authentication.
 
-### Powershell data source '[powershell-datasource]_Exchange-mailcontact-create-check-names-boolean'
-This Powershell data source runs a query to search for the use of the external e-mailaddress and returs a boolean.
+### Session Security Settings
 
-### Delegated form task '[task]_Exchange on-premise - Create Mailcontact'
-This delegated form task creates a mail contact.
+The connector sets `SkipCACheck`, `SkipCNCheck`, and `SkipRevocationCheck` to `$false` for enhanced security. If your environment uses self-signed certificates or has certificate validation issues, you may need to adjust these settings, though this is not recommended for production environments.
+
+### Validation Approach
+
+The connector uses three separate datasources to validate uniqueness:
+
+- **Display Name Validation**: Checks if the display name or name already exists for any mail contact
+- **Alias Validation**: Verifies that the alias (mailNickname) is not used by any recipient, including all mailbox types and mail-enabled objects
+- **Email Address Validation**: Ensures the external email address is not already assigned to any recipient in the Exchange organization, checking both primary SMTP addresses and proxy addresses
+
+### Organizational Unit Requirement
+
+Mail contacts must be created in a specific organizational unit defined by the `ADMailContactsOU` variable. Ensure this OU exists in Active Directory and that the service account has create permissions on this OU.
+
+### Command Import Strategy
+
+The connector explicitly imports only the required Exchange cmdlets (`New-MailContact`, `Set-MailContact`, `Get-Recipient`, `Get-Mailcontact`) to minimize session overhead and improve performance.
+
+## Development resources
+
+### API endpoints
+
+The connector uses Exchange On-Premises PowerShell cmdlets:
+
+| Cmdlet          | Description                               |
+| --------------- | ----------------------------------------- |
+| New-MailContact | Creates a new mail contact in Exchange    |
+| Set-MailContact | Configures mail contact properties        |
+| Get-Recipient   | Queries recipients to validate uniqueness |
+| Get-Mailcontact | Queries mail contacts for validation      |
+
+### API documentation
+
+- [Exchange Server PowerShell](https://learn.microsoft.com/en-us/powershell/exchange/exchange-management-shell)
+- [Connect to Exchange Servers using remote PowerShell](https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell)
+- [New-MailContact](https://learn.microsoft.com/en-us/powershell/module/exchange/new-mailcontact)
+- [Set-MailContact](https://learn.microsoft.com/en-us/powershell/module/exchange/set-mailcontact)
+- [Get-Recipient](https://learn.microsoft.com/en-us/powershell/module/exchange/get-recipient)
 
 ## Getting help
-_If you need help, feel free to ask questions on our [TODO-forum](https://forum.helloid.com/forum/helloid-connectors/service-automation/0000-helloid-sa-exchange-on-premises-create-mailcontact)_
 
-## HelloID Docs
+> :bulb: **Tip:**  
+> _For more information on Delegated Forms, please refer to our [documentation](https://docs.helloid.com/en/service-automation/delegated-forms.html) pages_.
+
+## HelloID docs
+
 The official HelloID documentation can be found at: https://docs.helloid.com/
