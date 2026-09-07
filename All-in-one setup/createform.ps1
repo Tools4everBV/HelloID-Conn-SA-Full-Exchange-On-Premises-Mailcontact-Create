@@ -7,7 +7,7 @@ $portalUrl = "https://CUSTOMER.helloid.com"
 $apiKey = "API_KEY"
 $apiSecret = "API_SECRET"
 $delegatedFormAccessGroupNames = @("") #Only unique names are supported. Groups must exist!
-$delegatedFormCategories = @("Exchange On-Premise") #Only unique names are supported. Categories will be created if not exists
+$delegatedFormCategories = @("Exchange Administration", "Exchange On-Premises") #Only unique names are supported. Categories will be created if not exists
 $script:debugLogging = $false #Default value: $false. If $true, the HelloID resource GUIDs will be shown in the logging
 $script:duplicateForm = $false #Default value: $false. If $true, the HelloID resource names will be changed to import a duplicate Form
 $script:duplicateFormSuffix = "_tmp" #the suffix will be added to all HelloID resource names to generate a duplicate form with different resource names
@@ -16,26 +16,36 @@ $script:duplicateFormSuffix = "_tmp" #the suffix will be added to all HelloID re
 #NOTE: You can also update the HelloID Global variable values afterwards in the HelloID Admin Portal: https://<CUSTOMER>.helloid.com/admin/variablelibrary
 $globalHelloIDVariables = [System.Collections.Generic.List[object]]@();
 
-#Global variable #1 >> ExchangeConnectionUri
+#Global variable #1 >> ADMailContactsOU
+$tmpName = @'
+ADMailContactsOU
+'@ 
+$tmpValue = @'
+'@ 
+$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False" });
+
+#Global variable #2 >> ExchangeConnectionUri
 $tmpName = @'
 ExchangeConnectionUri
 '@ 
-$tmpValue = ""
-$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False"});
-
-#Global variable #2 >> ExchangeAdminUsername
-$tmpName = @'
-ExchangeAdminUsername
+$tmpValue = @'
 '@ 
-$tmpValue = ""  
-$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False"});
+$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False" });
 
 #Global variable #3 >> ExchangeAdminPassword
 $tmpName = @'
 ExchangeAdminPassword
 '@ 
 $tmpValue = "" 
-$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "True"});
+$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "True" });
+
+#Global variable #4 >> ExchangeAdminUsername
+$tmpName = @'
+ExchangeAdminUsername
+'@ 
+$tmpValue = @'
+'@ 
+$globalHelloIDVariables.Add([PSCustomObject]@{name = $tmpName; value = $tmpValue; secret = "False" });
 
 
 #make sure write-information logging is visual
@@ -43,15 +53,16 @@ $InformationPreference = "continue"
 
 # Check for prefilled API Authorization header
 if (-not [string]::IsNullOrEmpty($portalApiBasic)) {
-    $script:headers = @{"authorization" = $portalApiBasic}
+    $script:headers = @{"authorization" = $portalApiBasic }
     Write-Information "Using prefilled API credentials"
-} else {
+}
+else {
     # Create authorization headers with HelloID API key
     $pair = "$apiKey" + ":" + "$apiSecret"
     $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
     $base64 = [System.Convert]::ToBase64String($bytes)
     $key = "Basic $base64"
-    $script:headers = @{"authorization" = $Key}
+    $script:headers = @{"authorization" = $Key }
     Write-Information "Using manual API credentials"
 }
 
@@ -59,7 +70,8 @@ if (-not [string]::IsNullOrEmpty($portalApiBasic)) {
 if (-not [string]::IsNullOrEmpty($portalBaseUrl)) {
     $script:PortalBaseUrl = $portalBaseUrl
     Write-Information "Using prefilled PortalURL: $script:PortalBaseUrl"
-} else {
+}
+else {
     $script:PortalBaseUrl = $portalUrl
     Write-Information "Using manual PortalURL: $script:PortalBaseUrl"
 }
@@ -70,12 +82,13 @@ $script:PortalBaseUrl = $script:PortalBaseUrl.trim("/") + "/"
 # Make sure to reveive an empty array using PowerShell Core
 function ConvertFrom-Json-WithEmptyArray([string]$jsonString) {
     # Running in PowerShell Core?
-    if($IsCoreCLR -eq $true){
+    if ($IsCoreCLR -eq $true) {
         $r = [Object[]]($jsonString | ConvertFrom-Json -NoEnumerate)
-        return ,$r  # Force return value to be an array using a comma
-    } else {
+        return , $r  # Force return value to be an array using a comma
+    }
+    else {
         $r = [Object[]]($jsonString | ConvertFrom-Json)
-        return ,$r  # Force return value to be an array using a comma
+        return , $r  # Force return value to be an array using a comma
     }
 }
 
@@ -91,7 +104,7 @@ function Invoke-HelloIDGlobalVariable {
     try {
         $uri = ($script:PortalBaseUrl + "api/v1/automation/variables/named/$Name")
         $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
-    
+
         if ([string]::IsNullOrEmpty($response.automationVariableGuid)) {
             #Create Variable
             $body = @{
@@ -101,17 +114,19 @@ function Invoke-HelloIDGlobalVariable {
                 ItemType = 0;
             }    
             $body = ConvertTo-Json -InputObject $body -Depth 100
-    
+
             $uri = ($script:PortalBaseUrl + "api/v1/automation/variable")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
             $variableGuid = $response.automationVariableGuid
 
             Write-Information "Variable '$Name' created$(if ($script:debugLogging -eq $true) { ": " + $variableGuid })"
-        } else {
+        }
+        else {
             $variableGuid = $response.automationVariableGuid
             Write-Warning "Variable '$Name' already exists$(if ($script:debugLogging -eq $true) { ": " + $variableGuid })"
         }
-    } catch {
+    }
+    catch {
         Write-Error "Variable '$Name', message: $_"
     }
 }
@@ -127,15 +142,15 @@ function Invoke-HelloIDAutomationTask {
         [parameter()][String][AllowEmptyString()]$ForceCreateTask,
         [parameter(Mandatory)][Ref]$returnObject
     )
-    
+
     $TaskName = $TaskName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
 
     try {
-        $uri = ($script:PortalBaseUrl +"api/v1/automationtasks?search=$TaskName&container=$AutomationContainer")
+        $uri = ($script:PortalBaseUrl + "api/v1/automationtasks?search=$TaskName&container=$AutomationContainer")
         $responseRaw = (Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false) 
-        $response = $responseRaw | Where-Object -filter {$_.name -eq $TaskName}
-    
-        if([string]::IsNullOrEmpty($response.automationTaskGuid) -or $ForceCreateTask -eq $true) {
+        $response = $responseRaw | Where-Object -filter { $_.name -eq $TaskName }
+
+        if ([string]::IsNullOrEmpty($response.automationTaskGuid) -or $ForceCreateTask -eq $true) {
             #Create Task
 
             $body = @{
@@ -147,18 +162,20 @@ function Invoke-HelloIDAutomationTask {
                 variables           = (ConvertFrom-Json-WithEmptyArray($Variables));
             }
             $body = ConvertTo-Json -InputObject $body -Depth 100
-    
-            $uri = ($script:PortalBaseUrl +"api/v1/automationtasks/powershell")
+
+            $uri = ($script:PortalBaseUrl + "api/v1/automationtasks/powershell")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
             $taskGuid = $response.automationTaskGuid
 
             Write-Information "Powershell task '$TaskName' created$(if ($script:debugLogging -eq $true) { ": " + $taskGuid })"
-        } else {
+        }
+        else {
             #Get TaskGUID
             $taskGuid = $response.automationTaskGuid
             Write-Warning "Powershell task '$TaskName' already exists$(if ($script:debugLogging -eq $true) { ": " + $taskGuid })"
         }
-    } catch {
+    }
+    catch {
         Write-Error "Powershell task '$TaskName', message: $_"
     }
 
@@ -174,23 +191,24 @@ function Invoke-HelloIDDatasource {
         [parameter()][String][AllowEmptyString()]$DatasourcePsScript,        
         [parameter()][String][AllowEmptyString()]$DatasourceInput,
         [parameter()][String][AllowEmptyString()]$AutomationTaskGuid,
+        [parameter()][String][AllowEmptyString()]$DatasourceRunInCloud,
         [parameter(Mandatory)][Ref]$returnObject
     )
 
     $DatasourceName = $DatasourceName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
 
-    $datasourceTypeName = switch($DatasourceType) { 
-        "1" { "Native data source"; break} 
-        "2" { "Static data source"; break} 
-        "3" { "Task data source"; break} 
-        "4" { "Powershell data source"; break}
+    $datasourceTypeName = switch ($DatasourceType) { 
+        "1" { "Native data source"; break } 
+        "2" { "Static data source"; break } 
+        "3" { "Task data source"; break } 
+        "4" { "Powershell data source"; break }
     }
-    
+
     try {
-        $uri = ($script:PortalBaseUrl +"api/v1/datasource/named/$DatasourceName")
+        $uri = ($script:PortalBaseUrl + "api/v1/datasource/named/$DatasourceName")
         $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
-      
-        if([string]::IsNullOrEmpty($response.dataSourceGUID)) {
+    
+        if ([string]::IsNullOrEmpty($response.dataSourceGUID)) {
             #Create DataSource
             $body = @{
                 name               = $DatasourceName;
@@ -200,21 +218,24 @@ function Invoke-HelloIDDatasource {
                 value              = (ConvertFrom-Json-WithEmptyArray($DatasourceStaticValue));
                 script             = $DatasourcePsScript;
                 input              = (ConvertFrom-Json-WithEmptyArray($DatasourceInput));
+                runInCloud         = $DatasourceRunInCloud;
             }
             $body = ConvertTo-Json -InputObject $body -Depth 100
-      
-            $uri = ($script:PortalBaseUrl +"api/v1/datasource")
+    
+            $uri = ($script:PortalBaseUrl + "api/v1/datasource")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
-              
+            
             $datasourceGuid = $response.dataSourceGUID
             Write-Information "$datasourceTypeName '$DatasourceName' created$(if ($script:debugLogging -eq $true) { ": " + $datasourceGuid })"
-        } else {
+        }
+        else {
             #Get DatasourceGUID
             $datasourceGuid = $response.dataSourceGUID
             Write-Warning "$datasourceTypeName '$DatasourceName' already exists$(if ($script:debugLogging -eq $true) { ": " + $datasourceGuid })"
         }
-    } catch {
-      Write-Error "$datasourceTypeName '$DatasourceName', message: $_"
+    }
+    catch {
+        Write-Error "$datasourceTypeName '$DatasourceName', message: $_"
     }
 
     $returnObject.Value = $datasourceGuid
@@ -226,35 +247,38 @@ function Invoke-HelloIDDynamicForm {
         [parameter(Mandatory)][String]$FormSchema,
         [parameter(Mandatory)][Ref]$returnObject
     )
-    
+
     $FormName = $FormName + $(if ($script:duplicateForm -eq $true) { $script:duplicateFormSuffix })
 
     try {
         try {
-            $uri = ($script:PortalBaseUrl +"api/v1/forms/$FormName")
+            $uri = ($script:PortalBaseUrl + "api/v1/forms/$FormName")
             $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
-        } catch {
+        }
+        catch {
             $response = $null
         }
-    
-        if(([string]::IsNullOrEmpty($response.dynamicFormGUID)) -or ($response.isUpdated -eq $true)) {
+
+        if (([string]::IsNullOrEmpty($response.dynamicFormGUID)) -or ($response.isUpdated -eq $true)) {
             #Create Dynamic form
             $body = @{
                 Name       = $FormName;
                 FormSchema = (ConvertFrom-Json-WithEmptyArray($FormSchema));
             }
             $body = ConvertTo-Json -InputObject $body -Depth 100
-    
-            $uri = ($script:PortalBaseUrl +"api/v1/forms")
+
+            $uri = ($script:PortalBaseUrl + "api/v1/forms")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
-    
+
             $formGuid = $response.dynamicFormGUID
             Write-Information "Dynamic form '$formName' created$(if ($script:debugLogging -eq $true) { ": " + $formGuid })"
-        } else {
+        }
+        else {
             $formGuid = $response.dynamicFormGUID
             Write-Warning "Dynamic form '$FormName' already exists$(if ($script:debugLogging -eq $true) { ": " + $formGuid })"
         }
-    } catch {
+    }
+    catch {
         Write-Error "Dynamic form '$FormName', message: $_"
     }
 
@@ -278,13 +302,14 @@ function Invoke-HelloIDDelegatedForm {
 
     try {
         try {
-            $uri = ($script:PortalBaseUrl +"api/v1/delegatedforms/$DelegatedFormName")
+            $uri = ($script:PortalBaseUrl + "api/v1/delegatedforms/$DelegatedFormName")
             $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
-        } catch {
+        }
+        catch {
             $response = $null
         }
-    
-        if([string]::IsNullOrEmpty($response.delegatedFormGUID)) {
+
+        if ([string]::IsNullOrEmpty($response.delegatedFormGUID)) {
             #Create DelegatedForm
             $body = @{
                 name            = $DelegatedFormName;
@@ -294,30 +319,32 @@ function Invoke-HelloIDDelegatedForm {
                 faIcon          = $FaIcon;
                 task            = ConvertFrom-Json -inputObject $task;
             }
-            if(-not[String]::IsNullOrEmpty($AccessGroups)) { 
+            if (-not[String]::IsNullOrEmpty($AccessGroups)) { 
                 $body += @{
-                    accessGroups    = (ConvertFrom-Json-WithEmptyArray($AccessGroups));
+                    accessGroups = (ConvertFrom-Json-WithEmptyArray($AccessGroups));
                 }
             }
             $body = ConvertTo-Json -InputObject $body -Depth 100
-    
-            $uri = ($script:PortalBaseUrl +"api/v1/delegatedforms")
+
+            $uri = ($script:PortalBaseUrl + "api/v1/delegatedforms")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
-    
+
             $delegatedFormGuid = $response.delegatedFormGUID
             Write-Information "Delegated form '$DelegatedFormName' created$(if ($script:debugLogging -eq $true) { ": " + $delegatedFormGuid })"
             $delegatedFormCreated = $true
 
             $bodyCategories = $Categories
-            $uri = ($script:PortalBaseUrl +"api/v1/delegatedforms/$delegatedFormGuid/categories")
+            $uri = ($script:PortalBaseUrl + "api/v1/delegatedforms/$delegatedFormGuid/categories")
             $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $bodyCategories
             Write-Information "Delegated form '$DelegatedFormName' updated with categories"
-        } else {
+        }
+        else {
             #Get delegatedFormGUID
             $delegatedFormGuid = $response.delegatedFormGUID
             Write-Warning "Delegated form '$DelegatedFormName' already exists$(if ($script:debugLogging -eq $true) { ": " + $delegatedFormGuid })"
         }
-    } catch {
+    }
+    catch {
         Write-Error "Delegated form '$DelegatedFormName', message: $_"
     }
 
@@ -325,225 +352,501 @@ function Invoke-HelloIDDelegatedForm {
     $returnObject.value.created = $delegatedFormCreated
 }
 
-
 <# Begin: HelloID Global Variables #>
 foreach ($item in $globalHelloIDVariables) {
-	Invoke-HelloIDGlobalVariable -Name $item.name -Value $item.value -Secret $item.secret 
+    Invoke-HelloIDGlobalVariable -Name $item.name -Value $item.value -Secret $item.secret 
 }
 <# End: HelloID Global Variables #>
 
 
 <# Begin: HelloID Data sources #>
-<# Begin: DataSource "Exchange-mailcontact-create-check-names" #>
+<# Begin: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-EmailAddress-Unique" #>
 $tmpPsScript = @'
-try{
-    $adminSecurePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force
-    $adminCredential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername,$adminSecurePassword)
-    $searchValue = ($dataSource.externalemailaddress).trim()
-    $searchQuery = "*$searchValue*"  
+# variables configured in form
+$mailaddress = $datasource.mailaddress
+
+# Build filter
+# Check for mailboxes matching the displayName, mailNickname (alias), primary email or proxy addresses
+# This will check ALL users (enabled and disabled), including shared/room/equipment mailboxes
+$filter = "PrimarySmtpAddress -eq '$mailaddress' -or EmailAddresses -like '*$mailaddress*'"
+
+# Global variables
+# Outcommented as these are set from Global Variables
+# $ExchangeConnectionUri = ""
+# $ExchangeAdminUsername = ""
+# $ExchangeAdminPassword = ""
+
+# Fixed values
+# Properties to select - Select only needed properties to limit memory usage and speed up processing
+$propertiesToSelect = @(
+    "Guid"
+    , "DisplayName"
+    , "Name"
+    , "Alias"
+    , "PrimarySmtpAddress"
+    , "EmailAddresses"
+    , "SamAccountName"
+    , "RecipientTypeDetails"
+)
+
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Set debug logging
+$VerbosePreference = "SilentlyContinue"
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
+#region functions
+#endregion functions
+
+try {
+    # Create credentials
+    $actionMessage = "creating credentials object"
+    
+    $securePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force
+    $credential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername, $securePassword)
+
+    # Connect to Exchange On-Premises
+    # Docs: https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell
+    $actionMessage = "connecting to Exchange On-Premises using URI [$ExchangeConnectionUri]"
 
     $sessionOptionParams = @{
-        SkipCACheck = $true
-        SkipCNCheck = $true
-        SkipRevocationCheck = $true
+        SkipCACheck         = $false
+        SkipCNCheck         = $false
+        SkipRevocationCheck = $false
     }
 
-    $sessionOption = New-PSSessionOption  @SessionOptionParams 
+    $sessionOption = New-PSSessionOption @sessionOptionParams
 
-    $sessionParams = @{        
-        Authentication = 'Kerberos' 
-        ConfigurationName = 'Microsoft.Exchange' 
-        ConnectionUri = $ExchangeConnectionUri 
-        Credential = $adminCredential        
-        SessionOption = $sessionOption       
+    $sessionParams = @{
+        Authentication    = 'Default'
+        ConfigurationName = 'Microsoft.Exchange'
+        ConnectionUri     = $ExchangeConnectionUri
+        Credential        = $credential
+        SessionOption     = $sessionOption
+        ErrorAction       = "Stop"
     }
 
-    $exchangeSession = New-PSSession @SessionParams
+    $exchangeSession = New-PSSession @sessionParams
+    $null = Import-PSSession -Session $exchangeSession -DisableNameChecking -AllowClobber -CommandName "Get-Recipient" -ErrorAction Stop
 
-    Write-Information "Search query is '$searchQuery'" 
-    
-    $getMailcontactsParams = @{
-        ResultSize = "Unlimited"
+     # Get Mailboxes
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/exchange/get-mailbox
+    $actionMessage = "querying all recipients that match filter [$($filter)]"
+
+    $getRecipientsSplatParams = @{
+        Filter      = $filter
+        ResultSize  = "Unlimited"
+        ErrorAction = 'Stop'
     }
-   
-    
-     $invokecommandParams = @{
-        Session = $exchangeSession
-        Scriptblock = [scriptblock] { Param ($Params)Get-Recipient @Params}
-        ArgumentList = $getMailcontactsParams
-    } 
 
-    Write-Information "Successfully connected to Exchange '$ExchangeConnectionUri'"  
-    
-    $mailBoxes =  Invoke-Command @invokeCommandParams | Where-Object { $_.EmailAddresses -match "$searchValue" } 
+    $recipients = Get-Recipient @getRecipientsSplatParams | Select-Object -Property $propertiesToSelect
+    Write-Information "Queried all recipients that match filter [$($filter)]. Result count: $(($recipients | Measure-Object).Count)"
 
-    $resultCount = $mailboxes.Identity.Count
+    # Check if value is unique and free
+    if (($recipients | Measure-Object).Count -gt 0) {
+        Write-Warning "Email address is not unique. In use by object with displayName [$($recipients.displayName)], samAccountName [$($recipients.SamAccountName)] mail [$($recipients.PrimarySmtpAddress)] and alias [$($recipients.Alias)]."
 
-        Write-Information "Successfully queried Exchange for email address '$searchValue'. Result count: $resultCount"
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Invalid: Email address is not unique. In use by object with displayName [$($recipients.displayName)], samAccountName [$($recipients.SamAccountName)] mail [$($recipients.PrimarySmtpAddress)] and alias [$($recipients.Alias)]"
+    }
+    else {
+        Write-Information "Email address is unique and free to use."
 
-
-        # Return info message if mailaddress is available or already in use
-        if($resultCount -eq 0){
-            $result = "Email address $emailAddress is free to use"
-        }else{
-            #$result = "Email address $emailAddress is already in use by another mailbox: $($mailboxes.DisplayName) ($($mailboxes.PrimarySmtpAddress))"
-            $result = "Email address $emailAddress is already in use by another mailuser: $($mailboxes.DisplayName) ($($mailboxes.PrimarySmtpAddress)) of type $($mailboxes.RecipientTypeDetails)"
-        }
-
-        $returnObject = @{Result=$result}
-        Write-Output $returnObject
-    
-    Remove-PSSession($exchangeSession)
-  
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Valid: Email address is unique and free to use." 
+    }   
 } catch {
-    Write-Error "Error connecting to Exchange using the URI '$exchangeConnectionUri', Message '$($_.Exception.Message)'"
+    $ex = $PSItem
+    if (-not [string]::IsNullOrEmpty($ex.Exception.Message)) {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    }
+    else {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception)"
+    }
+    Write-Warning $warningMessage
+    Write-Error $auditMessage
+    # exit # use when using multiple try/catch and the script must stop
 }
-
+finally {
+    # Disconnect from Exchange
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/remove-pssession
+    if ($null -ne $exchangeSession) {
+        try {
+            $deleteExchangeSessionSplatParams = @{
+                Session     = $exchangeSession
+                Confirm     = $false
+                ErrorAction = "Stop"
+            }
+            $null = Remove-PSSession @deleteExchangeSessionSplatParams
+        }
+        catch {
+            Write-Warning "Failed to disconnect from Exchange using URI [$ExchangeConnectionUri]. Error: $($_.Exception.Message)"
+        }
+    }
+}
 '@ 
 $tmpModel = @'
-[{"key":"Result","type":0}]
+[{"key":"output","type":0}]
 '@ 
 $tmpInput = @'
-[{"description":null,"translateDescription":false,"inputFieldType":1,"key":"externalemailaddress","type":0,"options":1}]
+[{"description":null,"translateDescription":false,"inputFieldType":1,"key":"mailaddress","type":0,"options":1}]
 '@ 
 $dataSourceGuid_1 = [PSCustomObject]@{} 
 $dataSourceGuid_1_Name = @'
-Exchange-mailcontact-create-check-names
+exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-EmailAddress-Unique
 '@ 
-Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_1_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -returnObject ([Ref]$dataSourceGuid_1) 
-<# End: DataSource "Exchange-mailcontact-create-check-names" #>
+Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_1_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -DataSourceRunInCloud "False" -returnObject ([Ref]$dataSourceGuid_1) 
+<# End: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-EmailAddress-Unique" #>
 
-<# Begin: DataSource "Exchange-mailcontact-create-check-names-boolean" #>
+<# Begin: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-Alias-Unique" #>
 $tmpPsScript = @'
-try{
-    $adminSecurePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force
-    $adminCredential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername,$adminSecurePassword)
-    $searchValue = ($dataSource.externalemailaddress).trim()
-    $searchQuery = "*$searchValue*"  
+# variables configured in form
+$alias = $datasource.alias
+$mailDomain = $datasource.externalEmailAddress.Split('@')[1]
+$mailadrestocheck = "$alias@$mailDomain"
+
+# Build filter
+# Check for mailboxes matching the displayName, mailNickname (alias), primary email or proxy addresses
+# This will check ALL users (enabled and disabled), including shared/room/equipment mailboxes
+$filter = "Alias -eq '$alias' -or PrimarySmtpAddress -eq '$mailadrestocheck' -or EmailAddresses -like '*$mailadrestocheck*'"
+
+# Global variables
+# Outcommented as these are set from Global Variables
+# $ExchangeConnectionUri = ""
+# $ExchangeAdminUsername = ""
+# $ExchangeAdminPassword = ""
+
+# Fixed values
+# Properties to select - Select only needed properties to limit memory usage and speed up processing
+$propertiesToSelect = @(
+    "Guid"
+    , "DisplayName"
+    , "Name"
+    , "Alias"
+    , "PrimarySmtpAddress"
+    , "EmailAddresses"    
+    , "RecipientTypeDetails"
+)
+
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Set debug logging
+$VerbosePreference = "SilentlyContinue"
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
+#region functions
+#endregion functions
+
+try {
+    # Create credentials
+    $actionMessage = "creating credentials object"
+    
+    $securePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force
+    $credential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername, $securePassword)
+
+    # Connect to Exchange On-Premises
+    # Docs: https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell
+    $actionMessage = "connecting to Exchange On-Premises using URI [$ExchangeConnectionUri]"
 
     $sessionOptionParams = @{
-        SkipCACheck = $true
-        SkipCNCheck = $true
-        SkipRevocationCheck = $true
+        SkipCACheck         = $false
+        SkipCNCheck         = $false
+        SkipRevocationCheck = $false
     }
 
-    $sessionOption = New-PSSessionOption  @SessionOptionParams 
+    $sessionOption = New-PSSessionOption @sessionOptionParams
 
-    $sessionParams = @{        
-        Authentication = 'Kerberos' 
-        ConfigurationName = 'Microsoft.Exchange' 
-        ConnectionUri = $ExchangeConnectionUri 
-        Credential = $adminCredential        
-        SessionOption = $sessionOption       
+    $sessionParams = @{
+        Authentication    = 'Default'
+        ConfigurationName = 'Microsoft.Exchange'
+        ConnectionUri     = $ExchangeConnectionUri
+        Credential        = $credential
+        SessionOption     = $sessionOption
+        ErrorAction       = "Stop"
     }
 
-    $exchangeSession = New-PSSession @SessionParams
+    $exchangeSession = New-PSSession @sessionParams
+    $null = Import-PSSession -Session $exchangeSession -DisableNameChecking -AllowClobber -CommandName "Get-Recipient" -ErrorAction Stop
 
-    Write-Information "Search query is '$searchQuery'" 
-    
-    $getMailcontactsParams = @{
-        ResultSize = "Unlimited"
+     # Get Mailboxes
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/exchange/get-mailbox
+    $actionMessage = "querying mailcontacts that match filter [$($filter)]"
+
+    $getRecipientsSplatParams = @{
+        Filter      = $filter
+        ResultSize  = "Unlimited"
+        ErrorAction = 'Stop'
     }
-   
-    
-     $invokecommandParams = @{
-        Session = $exchangeSession
-        Scriptblock = [scriptblock] { Param ($Params)Get-Recipient @Params}
-        ArgumentList = $getMailcontactsParams
-    } 
 
-    Write-Information "Successfully connected to Exchange '$ExchangeConnectionUri'"  
-    
-    $mailBoxes =  Invoke-Command @invokeCommandParams | Where-Object { $_.EmailAddresses -match "$searchValue" } 
+    $recipients = Get-Recipient @getRecipientsSplatParams | Select-Object -Property $propertiesToSelect
+    Write-Information "Queried aliases that match filter [$($filter)]. Result count: $(($recipients | Measure-Object).Count)"
 
-    $resultCount = $mailboxes.Identity.Count
+    # Check if value is unique and free
+    if (($recipients | Measure-Object).Count -gt 0) {
+        Write-Warning "Alias is not unique. In use by object with displayName [$($recipients.displayName)], mail [$($recipients.PrimarySmtpAddress)] and alias [$($recipients.Alias)]."
 
-        Write-Information "Successfully queried Exchange for email address '$searchValue'. Result count: $resultCount"
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Invalid: Alias is not unique. In use by object with displayName [$($recipients.displayName)], mail [$($recipients.PrimarySmtpAddress)] and alias [$($recipients.Alias)]"
+    }
+    else {
+        Write-Information "Alias is unique and free to use."
 
-
-        # Return info message if mailaddress is available or already in use
-        if($resultCount -eq 0){
-            $result = $true
-        }else{
-            #$result = "Email address $emailAddress is already in use by another mailbox: $($mailboxes.DisplayName) ($($mailboxes.PrimarySmtpAddress))"
-            $result = $false
-        }
-
-        $returnObject = @{Result=$result}
-        Write-Output $returnObject
-    
-    Remove-PSSession($exchangeSession)
-  
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Valid: Alias is unique and free to use." 
+    }   
 } catch {
-    Write-Error "Error connecting to Exchange using the URI '$exchangeConnectionUri', Message '$($_.Exception.Message)'"
+    $ex = $PSItem
+    if (-not [string]::IsNullOrEmpty($ex.Exception.Message)) {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    }
+    else {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception)"
+    }
+    Write-Warning $warningMessage
+    Write-Error $auditMessage
+    # exit # use when using multiple try/catch and the script must stop
 }
-
+finally {
+    # Disconnect from Exchange
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/remove-pssession
+    if ($null -ne $exchangeSession) {
+        try {
+            $deleteExchangeSessionSplatParams = @{
+                Session     = $exchangeSession
+                Confirm     = $false
+                ErrorAction = "Stop"
+            }
+            $null = Remove-PSSession @deleteExchangeSessionSplatParams
+        }
+        catch {
+            Write-Warning "Failed to disconnect from Exchange using URI [$ExchangeConnectionUri]. Error: $($_.Exception.Message)"
+        }
+    }
+}
 '@ 
 $tmpModel = @'
-[{"key":"Result","type":0}]
+[{"key":"output","type":0}]
 '@ 
 $tmpInput = @'
-[{"description":null,"translateDescription":false,"inputFieldType":1,"key":"externalemailaddress","type":0,"options":1}]
+[{"description":null,"translateDescription":false,"inputFieldType":1,"key":"alias","type":0,"options":1},{"description":null,"translateDescription":false,"inputFieldType":1,"key":"externalEmailAddress","type":0,"options":1}]
+'@ 
+$dataSourceGuid_2 = [PSCustomObject]@{} 
+$dataSourceGuid_2_Name = @'
+exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-Alias-Unique
+'@ 
+Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_2_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -DataSourceRunInCloud "False" -returnObject ([Ref]$dataSourceGuid_2) 
+<# End: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-Alias-Unique" #>
+
+<# Begin: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-DisplayName-Unique" #>
+$tmpPsScript = @'
+# variables configured in form
+$displayName = $datasource.displayName
+
+# Build filter
+# Check for mailboxes matching the displayName
+# This will check ALL users (enabled and disabled), including shared/room/equipment mailboxes
+$filter = "displayName -eq '$displayName' -or name -eq '$displayName'"
+
+# Global variables
+# Outcommented as these are set from Global Variables
+# $ExchangeConnectionUri = ""
+# $ExchangeAdminUsername = ""
+# $ExchangeAdminPassword = ""
+
+# Fixed values
+# Properties to select - Select only needed properties to limit memory usage and speed up processing
+$propertiesToSelect = @(
+    "Guid"
+    , "DisplayName"
+    , "Name"
+    , "Alias"
+    , "PrimarySmtpAddress"
+    , "EmailAddresses"    
+    , "RecipientTypeDetails"
+)
+
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Set debug logging
+$VerbosePreference = "SilentlyContinue"
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
+#region functions
+#endregion functions
+
+try{
+    # Create credentials
+    $actionMessage = "creating credentials object"
+    
+    $securePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force
+    $credential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername, $securePassword)
+
+    # Connect to Exchange On-Premises
+    # Docs: https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell
+    $actionMessage = "connecting to Exchange On-Premises using URI [$ExchangeConnectionUri]"
+
+    $sessionOptionParams = @{
+        SkipCACheck         = $false
+        SkipCNCheck         = $false
+        SkipRevocationCheck = $false
+    }
+
+    $sessionOption = New-PSSessionOption @sessionOptionParams
+
+    $sessionParams = @{
+        Authentication    = 'Default'
+        ConfigurationName = 'Microsoft.Exchange'
+        ConnectionUri     = $ExchangeConnectionUri
+        Credential        = $credential
+        SessionOption     = $sessionOption
+        ErrorAction       = "Stop"
+    }
+
+    $exchangeSession = New-PSSession @sessionParams
+    $null = Import-PSSession -Session $exchangeSession -DisableNameChecking -AllowClobber -CommandName "Get-Mailcontact" -ErrorAction Stop
+
+     # Get Mailboxes
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/exchange/get-mailbox
+    $actionMessage = "querying shared mailboxes that match filter [$($filter)]"
+
+    $getMailContactsSplatParams = @{
+        Filter      = $filter
+        ResultSize  = "Unlimited"
+        ErrorAction = 'Stop'
+    }
+
+    $mailcontacts = Get-Mailcontact @getMailContactsSplatParams | Select-Object -Property $propertiesToSelect
+    Write-Information "Queried Exchange On-Premises mailcontacts matching filter [$filter]. Result count: $(@($mailcontacts).Count)"
+
+    # Check if value is unique and free
+    if (($mailcontacts | Measure-Object).Count -gt 0) {
+        Write-Warning "Display name is not unique. In use by object with displayName [$($mailcontacts.DisplayName)], mail [$($mailcontacts.PrimarySmtpAddress)] and alias (mailNickName) [$($mailcontacts.Alias)]."
+
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Invalid: Display name is not unique. In use by object with displayName [$($mailcontacts.DisplayName)], mail [$($mailcontacts.PrimarySmtpAddress)] and alias (mailNickName) [$($mailcontacts.Alias)]"
+    }
+    else {
+        Write-Information "Display name is unique and free to use."
+
+        # Send results to HelloID
+        $actionMessage = "sending results to HelloID"
+        Write-Output "Valid: Display name is unique and free to use." 
+    }
+
+} catch {
+    $ex = $PSItem
+    if (-not [string]::IsNullOrEmpty($ex.Exception.Message)) {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    }
+    else {
+        $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception)"
+    }
+    Write-Warning $warningMessage
+    Write-Error $auditMessage
+    # exit # use when using multiple try/catch and the script must stop
+}
+finally {
+    # Disconnect from Exchange
+    # Docs: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/remove-pssession
+    if ($null -ne $exchangeSession) {
+        try {
+            $deleteExchangeSessionSplatParams = @{
+                Session     = $exchangeSession
+                Confirm     = $false
+                ErrorAction = "Stop"
+            }
+            $null = Remove-PSSession @deleteExchangeSessionSplatParams
+        }
+        catch {
+            Write-Warning "Failed to disconnect from Exchange using URI [$ExchangeConnectionUri]. Error: $($_.Exception.Message)"
+        }
+    }
+}
+'@ 
+$tmpModel = @'
+[{"key":"output","type":0}]
+'@ 
+$tmpInput = @'
+[{"description":null,"translateDescription":false,"inputFieldType":1,"key":"displayName","type":0,"options":1}]
 '@ 
 $dataSourceGuid_0 = [PSCustomObject]@{} 
 $dataSourceGuid_0_Name = @'
-Exchange-mailcontact-create-check-names-boolean
+exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-DisplayName-Unique
 '@ 
-Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_0_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -returnObject ([Ref]$dataSourceGuid_0) 
-<# End: DataSource "Exchange-mailcontact-create-check-names-boolean" #>
+Invoke-HelloIDDatasource -DatasourceName $dataSourceGuid_0_Name -DatasourceType "4" -DatasourceInput $tmpInput -DatasourcePsScript $tmpPsScript -DatasourceModel $tmpModel -DataSourceRunInCloud "False" -returnObject ([Ref]$dataSourceGuid_0) 
+<# End: DataSource "exchange-on-premises-mailcontact-create | Exchange-On-Premises-Check-DisplayName-Unique" #>
 <# End: HelloID Data sources #>
 
-<# Begin: Dynamic Form "Exchange on-premise - Create Mailcontact" #>
+<# Begin: Dynamic Form "Exchange On-Premises - Mailcontact - Create" #>
 $tmpSchema = @"
-[{"key":"externalEmailAddress","templateOptions":{"label":"External E-mail Address","pattern":{},"required":true},"validation":{"messages":{"pattern":"Invalid email address"}},"type":"email","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"emailuniquebool","templateOptions":{"label":"Emailaddress available?","useSwitch":true,"checkboxLabel":"Yes","mustBeTrue":true,"useDataSource":true,"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_0","input":{"propertyInputs":[{"propertyName":"externalemailaddress","otherFieldValue":{"otherFieldKey":"externalEmailAddress"}}]}},"displayField":"Result"},"type":"boolean","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"emailUniqueInfo","templateOptions":{"label":"Info","rows":3,"placeholder":"Loading...","useDataSource":true,"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_1","input":{"propertyInputs":[{"propertyName":"externalemailaddress","otherFieldValue":{"otherFieldKey":"externalEmailAddress"}}]}},"displayField":"Result"},"className":"textarea-resize-vert","type":"textarea","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"displayname","templateOptions":{"label":"Display Name","required":true,"minLength":2},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"alias","templateOptions":{"label":"Alias","useDataSource":false,"required":true,"minLength":2},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"firstname","templateOptions":{"label":"First name"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"initials","templateOptions":{"label":"Initials"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"lastname","templateOptions":{"label":"Last name"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"hidefromaddresslist","templateOptions":{"label":"Hide from Address Lists","useSwitch":true,"checkboxLabel":"Hide from Address Lists"},"type":"boolean","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false}]
+[{"key":"formRow","templateOptions":{},"fieldGroup":[{"key":"firstname","templateOptions":{"label":"First name"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"initials","templateOptions":{"label":"Initials"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false}],"type":"formrow","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"lastname","templateOptions":{"label":"Last name"},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"displayname","templateOptions":{"label":"Display Name","required":true,"minLength":2},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"nameValidation","templateOptions":{"label":"Display name validation","pattern":"^Valid.*","readonly":true,"placeholder":"Display name will be validated on uniqnueness in Exchange On-Premises","useDataSource":true,"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_0","input":{"propertyInputs":[{"propertyName":"displayName","otherFieldValue":{"otherFieldKey":"displayname"}}]}},"displayField":"output","required":true},"hideExpression":"!model[\"displayname\"]","type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"externalEmailAddress","templateOptions":{"label":"External E-mail Address","pattern":{},"required":true},"validation":{"messages":{"pattern":"Invalid email address"}},"type":"email","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"mailValidation","templateOptions":{"label":"Email address validation","pattern":"^Valid.*","placeholder":"Email address will be validated on uniqnueness in Exchange On-Premises","required":true,"useDependOn":false,"dependOn":"externalEmailAddress","useDataSource":true,"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_1","input":{"propertyInputs":[{"propertyName":"mailaddress","otherFieldValue":{"otherFieldKey":"externalEmailAddress"}}]}},"displayField":"output","readonly":true},"hideExpression":"!model[\"externalEmailAddress\"]","type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"alias","templateOptions":{"label":"Alias","useDataSource":false,"required":true,"minLength":2},"type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"aliasValidation","templateOptions":{"label":"Alias validation","placeholder":"Alias will be validated on uniqnueness in Exchange On-Premises","pattern":"^Valid.*","readonly":true,"useDataSource":true,"dataSourceConfig":{"dataSourceGuid":"$dataSourceGuid_2","input":{"propertyInputs":[{"propertyName":"alias","otherFieldValue":{"otherFieldKey":"alias"}},{"propertyName":"externalEmailAddress","otherFieldValue":{"otherFieldKey":"externalEmailAddress"}}]}},"displayField":"output"},"hideExpression":"!model[\"alias\"]","type":"input","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false},{"key":"hidefromaddresslist","templateOptions":{"label":"Hide from Address Lists","useSwitch":true,"checkboxLabel":"Hide from Address Lists"},"type":"boolean","summaryVisibility":"Show","requiresTemplateOptions":true,"requiresKey":true,"requiresDataSource":false}]
 "@ 
 
 $dynamicFormGuid = [PSCustomObject]@{} 
 $dynamicFormName = @'
-Exchange on-premise - Create Mailcontact
+Exchange On-Premises - Mailcontact - Create
 '@ 
 Invoke-HelloIDDynamicForm -FormName $dynamicFormName -FormSchema $tmpSchema  -returnObject ([Ref]$dynamicFormGuid) 
 <# END: Dynamic Form #>
 
 <# Begin: Delegated Form Access Groups and Categories #>
 $delegatedFormAccessGroupGuids = @()
-if(-not[String]::IsNullOrEmpty($delegatedFormAccessGroupNames)){
-    foreach($group in $delegatedFormAccessGroupNames) {
+if (-not[String]::IsNullOrEmpty($delegatedFormAccessGroupNames)) {
+    foreach ($group in $delegatedFormAccessGroupNames) {
         try {
-            $uri = ($script:PortalBaseUrl +"api/v1/groups/$group")
+            $uri = ($script:PortalBaseUrl + "api/v1/groups/$group")
             $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
             $delegatedFormAccessGroupGuid = $response.groupGuid
             $delegatedFormAccessGroupGuids += $delegatedFormAccessGroupGuid
-            
+        
             Write-Information "HelloID (access)group '$group' successfully found$(if ($script:debugLogging -eq $true) { ": " + $delegatedFormAccessGroupGuid })"
-        } catch {
+        }
+        catch {
             Write-Error "HelloID (access)group '$group', message: $_"
         }
     }
-    if($null -ne $delegatedFormAccessGroupGuids){
+    if ($null -ne $delegatedFormAccessGroupGuids) {
         $delegatedFormAccessGroupGuids = ($delegatedFormAccessGroupGuids | Select-Object -Unique | ConvertTo-Json -Depth 100 -Compress)
     }
 }
 
 $delegatedFormCategoryGuids = @()
-foreach($category in $delegatedFormCategories) {
+foreach ($category in $delegatedFormCategories) {
     try {
-        $uri = ($script:PortalBaseUrl +"api/v1/delegatedformcategories/$category")
+        $uri = ($script:PortalBaseUrl + "api/v1/delegatedformcategories/$category")
         $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false
-        $response = $response | Where-Object {$_.name.en -eq $category}
-        
+        $response = $response | Where-Object { $_.name.en -eq $category }
+    
         $tmpGuid = $response.delegatedFormCategoryGuid
         $delegatedFormCategoryGuids += $tmpGuid
-        
+    
         Write-Information "HelloID Delegated Form category '$category' successfully found$(if ($script:debugLogging -eq $true) { ": " + $tmpGuid })"
-    } catch {
+    }
+    catch {
         Write-Warning "HelloID Delegated Form category '$category' not found"
         $body = @{
-            name = @{"en" = $category};
+            name = @{"en" = $category };
         }
         $body = ConvertTo-Json -InputObject $body -Depth 100
 
-        $uri = ($script:PortalBaseUrl +"api/v1/delegatedformcategories")
+        $uri = ($script:PortalBaseUrl + "api/v1/delegatedformcategories")
         $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $script:headers -ContentType "application/json" -Verbose:$false -Body $body
         $tmpGuid = $response.delegatedFormCategoryGuid
         $delegatedFormCategoryGuids += $tmpGuid
@@ -555,12 +858,12 @@ $delegatedFormCategoryGuids = (ConvertTo-Json -InputObject $delegatedFormCategor
 <# End: Delegated Form Access Groups and Categories #>
 
 <# Begin: Delegated Form #>
-$delegatedFormRef = [PSCustomObject]@{guid = $null; created = $null} 
+$delegatedFormRef = [PSCustomObject]@{guid = $null; created = $null } 
 $delegatedFormName = @'
-Exchange on-premise - Create Mailcontact
+Exchange On-Premises - Mailcontact - Create
 '@
 $tmpTask = @'
-{"name":"Exchange on-premise - Create Mailcontact","script":"# Set TLS to accept TLS, TLS 1.1 and TLS 1.2\r\n[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12\r\n\r\n$VerbosePreference = \"SilentlyContinue\"\r\n$InformationPreference = \"Continue\"\r\n$WarningPreference = \"Continue\"\r\n\r\n# Variables configured in form\r\n$Alias = $form.alias\r\n$ExternalEmailAddress = $form.externalEmailAddress\r\n$initials = $form.initials\r\n$FirstName = $form.firstname\r\n$LastName = $form.lastname\r\n$Name = $form.displayname\r\n$HiddenFromAddressListsBoolean = $form.hidefromaddresslist\r\n\r\nfunction Resolve-HTTPError {\r\n    [CmdletBinding()]\r\n    param (\r\n        [Parameter(Mandatory,\r\n            ValueFromPipeline\r\n        )]\r\n        [object]$ErrorObject\r\n    )\r\n    process {\r\n        $httpErrorObj = [PSCustomObject]@{\r\n            FullyQualifiedErrorId = $ErrorObject.FullyQualifiedErrorId\r\n            MyCommand             = $ErrorObject.InvocationInfo.MyCommand\r\n            RequestUri            = $ErrorObject.TargetObject.RequestUri\r\n            ScriptStackTrace      = $ErrorObject.ScriptStackTrace\r\n            ErrorMessage          = \u0027\u0027\r\n        }\r\n        if ($ErrorObject.Exception.GetType().FullName -eq \u0027Microsoft.PowerShell.Commands.HttpResponseException\u0027) {\r\n            $httpErrorObj.ErrorMessage = $ErrorObject.ErrorDetails.Message\r\n        }\r\n        elseif ($ErrorObject.Exception.GetType().FullName -eq \u0027System.Net.WebException\u0027) {\r\n            $httpErrorObj.ErrorMessage = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()\r\n        }\r\n        Write-Output $httpErrorObj\r\n    }\r\n}\r\n\r\nfunction Remove-EmptyValuesFromHashtable {\r\n    param(\r\n        [parameter(Mandatory = $true)][Hashtable]$Hashtable\r\n    )\r\n\r\n    $newHashtable = @{}\r\n    foreach ($Key in $Hashtable.Keys) {\r\n        if (-not[String]::IsNullOrEmpty($Hashtable.$Key)) {\r\n            $null = $newHashtable.Add($Key, $Hashtable.$Key)\r\n        }\r\n    }\r\n    \r\n    return $newHashtable\r\n}\r\n\r\n\u003c#----- Exchange On-Premises: Start -----#\u003e\r\n# Connect to Exchange\r\ntry {\r\n    $adminSecurePassword = ConvertTo-SecureString -String \"$ExchangeAdminPassword\" -AsPlainText -Force\r\n    $adminCredential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername, $adminSecurePassword)\r\n    $sessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck\r\n    $exchangeSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $exchangeConnectionUri -Credential $adminCredential -SessionOption $sessionOption -ErrorAction Stop \r\n    $null = Import-PSSession $exchangeSession -DisableNameChecking -AllowClobber\r\n    Write-Information \"Successfully connected to Exchange using the URI [$exchangeConnectionUri]\" \r\n    \r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premise\" # optional (free format text) \r\n        Message           = \"Successfully connected to Exchange using the URI [$exchangeConnectionUri]\" # required (free format text) \r\n        IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $exchangeConnectionUri # optional (free format text) \r\n        TargetIdentifier  = $([string]$session.GUID) # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}\r\ncatch {\r\n    Write-Error \"Error connecting to Exchange using the URI [$exchangeConnectionUri]. Error: $($_.Exception.Message)\"\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premise\" # optional (free format text) \r\n        Message           = \"Failed to connect to Exchange using the URI [$exchangeConnectionUri].\" # required (free format text) \r\n        IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $exchangeConnectionUri # optional (free format text) \r\n        TargetIdentifier  = $([string]$session.GUID) # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}\r\n\r\ntry {\r\n    # Check if Mail Contact already exists (should only occur on a retry of task)\r\n    try {\r\n        Write-Verbose \"Querying Exchange Online mail contact with ExternalEmailAddress \u0027$ExternalEmailAddress\u0027 OR Alias \u0027$Alias\u0027 OR Name \u0027$Name\u0027\"\r\n        $mailContact = Get-Recipient -ResultSize unlimited | Where-Object { $_.EmailAddresses -match \"$ExternalEmailAddress\" }\r\n        Write-Information \"Successfully queried Exchange Online mailboxes with email address \u0027$ExternalEmailAddress\u0027 of type $($mailboxes.RecipientTypeDetails). Result count: $($mailboxes.Identity.Count)\"\r\n    }\r\n    catch {\r\n        $ex = $PSItem\r\n        if ( $($ex.Exception.GetType().FullName -eq \u0027Microsoft.PowerShell.Commands.HttpResponseException\u0027) -or $($ex.Exception.GetType().FullName -eq \u0027System.Net.WebException\u0027)) {\r\n            $errorObject = Resolve-HTTPError -Error $ex    \r\n            $verboseErrorMessage = $errorObject.ErrorMessage    \r\n            $auditErrorMessage = $errorObject.ErrorMessage\r\n        }\r\n    \r\n        # If error message empty, fall back on $ex.Exception.Message\r\n        if ([String]::IsNullOrEmpty($verboseErrorMessage)) {\r\n            $verboseErrorMessage = $ex.Exception.Message\r\n        }\r\n        if ([String]::IsNullOrEmpty($auditErrorMessage)) {\r\n            $auditErrorMessage = $ex.Exception.Message\r\n        }\r\n\r\n        Write-Verbose \"Error at Line \u0027$($ex.InvocationInfo.ScriptLineNumber)\u0027: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)\"\r\n        throw \"Error creating mail contact with the following parameters: $($mailContactParams|ConvertTo-Json). Error Message: $auditErrorMessage\"\r\n\r\n        # Clean up error variables\r\n        Remove-Variable \u0027verboseErrorMessage\u0027 -ErrorAction SilentlyContinue\r\n        Remove-Variable \u0027auditErrorMessage\u0027 -ErrorAction SilentlyContinue\r\n    }\r\n    if ($null -ne $mailContact.Identity) {\r\n        Write-Warning \"Found existing mail contact with ExternalEmailAddress \u0027$ExternalEmailAddress\u0027 OR Alias \u0027$Alias\u0027 OR Name \u0027$Name\u0027.\"\r\n    }\r\n    else {\r\n        # Create Mail Contact\r\n        try {\r\n            Write-Verbose \"Creating mail contact \u0027$($Name)\u0027 with ExternalEmailAddress \u0027$($ExternalEmailAddress)\u0027\"\r\n\r\n            $mailContactParams = @{\r\n                Name                 = $Name\r\n                FirstName            = $FirstName\r\n                Initials             = $Initials\r\n                LastName             = $LastName\r\n                Alias                = $Alias        \r\n                ExternalEmailAddress = $ExternalEmailAddress\r\n                OrganizationalUnit   = $ADContactsOU\r\n            }\r\n            $mailContactParams = Remove-EmptyValuesFromHashtable $mailContactParams\r\n            $mailContact = New-MailContact @mailContactParams -ErrorAction Stop\r\n\r\n            Write-Information \"Successfully created mail contact with the following parameters: $($mailContactParams|ConvertTo-Json)\"\r\n            $Log = @{\r\n                Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n                System            = \"Exchange On-Premise\" # optional (free format text) \r\n                Message           = \"Successfully created mail contact with the following parameters: $($mailContactParams|ConvertTo-Json)\" # required (free format text) \r\n                IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n                TargetDisplayName = $([string]$mailContact.DisplayName) # optional (free format text) \r\n                TargetIdentifier  = $([string]$mailContact.Guid) # optional (free format text) \r\n            }\r\n            #send result back\r\n            Write-Information -Tags \"Audit\" -MessageData $log\r\n\r\n            \r\n    \r\n            if ($HiddenFromAddressListsBoolean -eq \u0027true\u0027) {\r\n                $mailContactUpdateParams = @{            \r\n                    Identity                      = $mailContact.Identity                \r\n                    HiddenFromAddressListsEnabled = $true\r\n                }   \r\n                $null = Set-MailContact @mailContactUpdateParams -ErrorAction Stop        \r\n            }\r\n        \r\n        }\r\n        catch {\r\n            $ex = $PSItem\r\n            if ( $($ex.Exception.GetType().FullName -eq \u0027Microsoft.PowerShell.Commands.HttpResponseException\u0027) -or $($ex.Exception.GetType().FullName -eq \u0027System.Net.WebException\u0027)) {\r\n                $errorObject = Resolve-HTTPError -Error $ex\r\n                $verboseErrorMessage = $errorObject.ErrorMessage\r\n                $auditErrorMessage = $errorObject.ErrorMessage\r\n            }\r\n        \r\n            # If error message empty, fall back on $ex.Exception.Message\r\n            if ([String]::IsNullOrEmpty($verboseErrorMessage)) {\r\n                $verboseErrorMessage = $ex.Exception.Message\r\n            }\r\n            if ([String]::IsNullOrEmpty($auditErrorMessage)) {\r\n                $auditErrorMessage = $ex.Exception.Message\r\n            }\r\n    \r\n            $Log = @{\r\n                Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n                System            = \"Exchange On-Premise\" # optional (free format text) \r\n                Message           = \"Error creating mail contact with the following parameters: $($mailContactParams|ConvertTo-Json). Error Message: $auditErrorMessage\" # required (free format text) \r\n                IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n                TargetDisplayName = $([string]$mailContactParams.Name) # optional (free format text) \r\n                TargetIdentifier  = $([string]$mailContactParams.ExternalEmailAddress) # optional (free format text) \r\n            }\r\n            #send result back  \r\n            Write-Information -Tags \"Audit\" -MessageData $log\r\n    \r\n            Write-Verbose \"Error at Line \u0027$($ex.InvocationInfo.ScriptLineNumber)\u0027: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)\"\r\n            throw \"Error creating mail contact with the following parameters: $($mailContactParams|ConvertTo-Json). Error Message: $auditErrorMessage\"\r\n    \r\n            # Clean up error variables\r\n            Remove-Variable \u0027verboseErrorMessage\u0027 -ErrorAction SilentlyContinue\r\n            Remove-Variable \u0027auditErrorMessage\u0027 -ErrorAction SilentlyContinue\r\n        }\r\n    }\r\n}\r\ncatch {\r\n    Write-Error \"Error creating mail contact.  Error: $($_.Exception.Message)\"\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premise\" # optional (free format text) \r\n        Message           = \"Error creating mail contact.\" # required (free format text) \r\n        IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $([string]$mailContactParams.Name) # optional (free format text) \r\n        TargetIdentifier  = $([string]$mailContactParams.ExternalEmailAddress) # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}\r\n\r\n# Disconnect from Exchange\r\ntry {\r\n    Remove-PsSession -Session $exchangeSession -Confirm:$false -ErrorAction Stop\r\n    Write-Information \"Successfully disconnected from Exchange using the URI [$exchangeConnectionUri]\"     \r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premise\" # optional (free format text) \r\n        Message           = \"Successfully disconnected from Exchange using the URI [$exchangeConnectionUri]\" # required (free format text) \r\n        IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $exchangeConnectionUri # optional (free format text) \r\n        TargetIdentifier  = $([string]$session.GUID) # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}\r\ncatch {\r\n    Write-Error \"Error disconnecting from Exchange.  Error: $($_.Exception.Message)\"\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premise\" # optional (free format text) \r\n        Message           = \"Failed to disconnect from Exchange using the URI [$exchangeConnectionUri].\" # required (free format text) \r\n        IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $exchangeConnectionUri # optional (free format text) \r\n        TargetIdentifier  = $([string]$session.GUID) # optional (free format text) \r\n    }\r\n    #send result back  \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n}\r\n\u003c#----- Exchange On-Premises: End -----#\u003e","runInCloud":false}
+{"name":"Exchange On-Premises - Mailcontact - Create","script":"# variables configured in form\r\n$mailContactInitials = $form.initials\r\n$mailContactFirstName = $form.firstname\r\n$mailContactLastName = $form.lastname\r\n$mailContactDisplayName = $form.displayName\r\n$mailContactAlias = $form.alias\r\n$mailContactPrimarySmtpAddress = $form.externalEmailAddress\r\n$mailContactAlias = $form.alias\r\n$blnHiddenFromAddressList = [System.Convert]::ToBoolean($form.hidefromaddresslist)\r\n\r\n# Global variables\r\n# Outcommented as these are set from Global Variables\r\n# $ExchangeConnectionUri = \"\"\r\n# $ExchangeAdminUsername = \"\"\r\n# $ExchangeAdminPassword = \"\"\r\n# $$ADMailContactsOU = \"\"\r\n\r\n# Fixed values\r\n$commands = @(\r\n    \"New-MailContact\"\r\n    , \"Set-MailContact\"\r\n)\r\n\r\n# Enable TLS1.2\r\n[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12\r\n\r\n# Set debug logging\r\n$VerbosePreference = \"SilentlyContinue\"\r\n$InformationPreference = \"Continue\"\r\n$WarningPreference = \"Continue\"\r\n\r\ntry {\r\n    # Create credentials\r\n    $actionMessage = \"creating credentials object\"\r\n    \r\n    $securePassword = ConvertTo-SecureString -String $ExchangeAdminPassword -AsPlainText -Force\r\n    $credential = [System.Management.Automation.PSCredential]::new($ExchangeAdminUsername, $securePassword)\r\n    \r\n    Write-Verbose \"Created credentials for user [$ExchangeAdminUsername]\"\r\n\r\n    # Connect to Exchange On-Premises\r\n    # Docs: https://learn.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell\r\n    $actionMessage = \"connecting to Exchange On-Premises\"\r\n\r\n    $sessionOptionParams = @{\r\n        SkipCACheck         = $false\r\n        SkipCNCheck         = $false\r\n        SkipRevocationCheck = $false\r\n    }\r\n\r\n    $sessionOption = New-PSSessionOption @sessionOptionParams\r\n\r\n    $sessionParams = @{\r\n        Authentication    = \u0027Default\u0027\r\n        ConfigurationName = \u0027Microsoft.Exchange\u0027\r\n        Credential        = $credential\r\n        ConnectionUri     = $ExchangeConnectionUri\r\n        SessionOption     = $sessionOption\r\n        ErrorAction       = \"Stop\"\r\n    }\r\n\r\n    $exchangeSession = New-PSSession @sessionParams\r\n    $null = Import-PSSession -Session $exchangeSession -DisableNameChecking -AllowClobber -CommandName $commands -ErrorAction Stop\r\n\r\n    # Send initial audit log\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premises\" # optional (free format text) \r\n        Message           = \"Successfully connected to Exchange using URI [$ExchangeConnectionUri]\" # required (free format text) \r\n        IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $ExchangeConnectionUri # optional (free format text) \r\n        TargetIdentifier  = $([string]$exchangeSession.InstanceId) # optional (free format text) \r\n    }\r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n\r\n    Write-Verbose \"Creating mail contact \u0027$mailContactDisplayName\u0027 with ExternalEmailAddress \u0027$mailContactPrimarySmtpAddress\u0027\"\r\n\r\n    $exchangeMailContactParams = @{\r\n        Name                 = $mailContactDisplayName\r\n        FirstName            = $mailContactFirstName\r\n        Initials             = $mailContactInitials\r\n        LastName             = $mailContactLastName\r\n        Alias                = $mailContactAlias\r\n        ExternalEmailAddress = $mailContactPrimarySmtpAddress\r\n        OrganizationalUnit   = $ADMailContactsOU\r\n        ErrorAction          = \"Stop\"\r\n    }\r\n    $actionMessage = \"creating Exchange On-Premises mailcontact\"    \r\n    $exchangeMailContact = New-MailContact @exchangeMailContactParams\r\n\r\n    Write-Information \"Successfully created mail contact with the following parameters: $($exchangeMailContactParams|ConvertTo-Json)\"\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premises\" # optional (free format text) \r\n        Message           = \"Successfully created mail contact with the following parameters: $($exchangeMailContactParams|ConvertTo-Json)\" # required (free format text) \r\n        IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $mailContactDisplayName # optional (free format text) \r\n        TargetIdentifier  = $([string]$exchangeMailContact.Guid) # optional (free format text) \r\n    }\r\n    #send result back\r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n\r\n    $actionMessage = \"setting addressbook visibility\"\r\n    $exchangeMailContactUpdateParams = @{            \r\n        Identity                      = $exchangeMailContact.Identity                \r\n        HiddenFromAddressListsEnabled = $blnHiddenFromAddressList\r\n        ErrorAction                   = \u0027Stop\u0027\r\n    }   \r\n    $null = Set-MailContact @exchangeMailContactUpdateParams\r\n        \r\n}\r\ncatch {\r\n    $ex = $PSItem\r\n    if (-not [string]::IsNullOrEmpty($ex.Exception.Message)) {\r\n        $warningMessage = \"Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)\"\r\n        $auditMessage = \"Error $($actionMessage). Error: $($ex.Exception.Message)\"\r\n    }\r\n    else {\r\n        $warningMessage = \"Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception)\"\r\n        $auditMessage = \"Error $($actionMessage). Error: $($ex.Exception)\"\r\n    }\r\n\r\n    # Send error audit log to HelloID\r\n    $Log = @{\r\n        Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n        System            = \"Exchange On-Premises\" # optional (free format text) \r\n        Message           = $auditMessage # required (free format text) \r\n        IsError           = $true # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n        TargetDisplayName = $mailbox.DisplayName # optional (free format text) \r\n        TargetIdentifier  = $mailbox.PrimarySmtpAddress # optional (free format text) \r\n    }\r\n    \r\n    Write-Information -Tags \"Audit\" -MessageData $log\r\n    Write-Warning $warningMessage\r\n    Write-Error $auditMessage\r\n}\r\nfinally {\r\n    # Disconnect from Exchange\r\n    # Docs: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/remove-pssession\r\n    if ($null -ne $exchangeSession) {\r\n        try {\r\n            $deleteExchangeSessionSplatParams = @{\r\n                Session     = $exchangeSession\r\n                Confirm     = $false\r\n                ErrorAction = \"Stop\"\r\n            }\r\n            $null = Remove-PSSession @deleteExchangeSessionSplatParams\r\n\r\n            # Send disconnect audit log\r\n            $Log = @{\r\n                Action            = \"CreateAccount\" # optional. ENUM (undefined = default) \r\n                System            = \"Exchange On-Premises\" # optional (free format text) \r\n                Message           = \"Successfully disconnected from Exchange using URI [$ExchangeConnectionUri]\" # required (free format text) \r\n                IsError           = $false # optional. Elastic reporting purposes only. (default = $false. $true = Executed action returned an error) \r\n                TargetDisplayName = $ExchangeConnectionUri # optional (free format text) \r\n                TargetIdentifier  = $([string]$exchangeSession.InstanceId) # optional (free format text) \r\n            }\r\n            Write-Information -Tags \"Audit\" -MessageData $log\r\n        }\r\n        catch {\r\n            Write-Warning \"Failed to disconnect from Exchange using URI [$ExchangeConnectionUri]. Error: $($_.Exception.Message)\"\r\n        }\r\n    }\r\n}","runInCloud":false}
 '@ 
 
 Invoke-HelloIDDelegatedForm -DelegatedFormName $delegatedFormName -DynamicFormGuid $dynamicFormGuid -AccessGroups $delegatedFormAccessGroupGuids -Categories $delegatedFormCategoryGuids -UseFaIcon "True" -FaIcon "fa fa-user-plus" -task $tmpTask -returnObject ([Ref]$delegatedFormRef) 

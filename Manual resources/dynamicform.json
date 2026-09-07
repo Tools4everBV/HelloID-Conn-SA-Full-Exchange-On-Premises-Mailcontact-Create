@@ -1,5 +1,94 @@
 [
     {
+        "key":  "formRow",
+        "templateOptions":  {
+
+                            },
+        "fieldGroup":  [
+                           {
+                               "key":  "firstname",
+                               "templateOptions":  {
+                                                       "label":  "First name"
+                                                   },
+                               "type":  "input",
+                               "summaryVisibility":  "Show",
+                               "requiresTemplateOptions":  true,
+                               "requiresKey":  true,
+                               "requiresDataSource":  false
+                           },
+                           {
+                               "key":  "initials",
+                               "templateOptions":  {
+                                                       "label":  "Initials"
+                                                   },
+                               "type":  "input",
+                               "summaryVisibility":  "Show",
+                               "requiresTemplateOptions":  true,
+                               "requiresKey":  true,
+                               "requiresDataSource":  false
+                           }
+                       ],
+        "type":  "formrow",
+        "requiresTemplateOptions":  true,
+        "requiresKey":  true,
+        "requiresDataSource":  false
+    },
+    {
+        "key":  "lastname",
+        "templateOptions":  {
+                                "label":  "Last name"
+                            },
+        "type":  "input",
+        "summaryVisibility":  "Show",
+        "requiresTemplateOptions":  true,
+        "requiresKey":  true,
+        "requiresDataSource":  false
+    },
+    {
+        "key":  "displayname",
+        "templateOptions":  {
+                                "label":  "Display Name",
+                                "required":  true,
+                                "minLength":  2
+                            },
+        "type":  "input",
+        "summaryVisibility":  "Show",
+        "requiresTemplateOptions":  true,
+        "requiresKey":  true,
+        "requiresDataSource":  false
+    },
+    {
+        "key":  "nameValidation",
+        "templateOptions":  {
+                                "label":  "Display name validation",
+                                "pattern":  "^Valid.*",
+                                "readonly":  true,
+                                "placeholder":  "Display name will be validated on uniqnueness in Exchange On-Premises",
+                                "useDataSource":  true,
+                                "dataSourceConfig":  {
+                                                         "dataSourceGuid":  "$dataSourceGuid_0",
+                                                         "input":  {
+                                                                       "propertyInputs":  [
+                                                                                              {
+                                                                                                  "propertyName":  "displayName",
+                                                                                                  "otherFieldValue":  {
+                                                                                                                          "otherFieldKey":  "displayname"
+                                                                                                                      }
+                                                                                              }
+                                                                                          ]
+                                                                   }
+                                                     },
+                                "displayField":  "output",
+                                "required":  true
+                            },
+        "hideExpression":  "!model[\"displayname\"]",
+        "type":  "input",
+        "summaryVisibility":  "Show",
+        "requiresTemplateOptions":  true,
+        "requiresKey":  true,
+        "requiresDataSource":  false
+    },
+    {
         "key":  "externalEmailAddress",
         "templateOptions":  {
                                 "label":  "External E-mail Address",
@@ -20,47 +109,21 @@
         "requiresDataSource":  false
     },
     {
-        "key":  "emailuniquebool",
+        "key":  "mailValidation",
         "templateOptions":  {
-                                "label":  "Emailaddress available?",
-                                "useSwitch":  true,
-                                "checkboxLabel":  "Yes",
-                                "mustBeTrue":  true,
-                                "useDataSource":  true,
-                                "dataSourceConfig":  {
-                                                         "dataSourceGuid":  "$dataSourceGuid_0",
-                                                         "input":  {
-                                                                       "propertyInputs":  [
-                                                                                              {
-                                                                                                  "propertyName":  "externalemailaddress",
-                                                                                                  "otherFieldValue":  {
-                                                                                                                          "otherFieldKey":  "externalEmailAddress"
-                                                                                                                      }
-                                                                                              }
-                                                                                          ]
-                                                                   }
-                                                     },
-                                "displayField":  "Result"
-                            },
-        "type":  "boolean",
-        "summaryVisibility":  "Show",
-        "requiresTemplateOptions":  true,
-        "requiresKey":  true,
-        "requiresDataSource":  false
-    },
-    {
-        "key":  "emailUniqueInfo",
-        "templateOptions":  {
-                                "label":  "Info",
-                                "rows":  3,
-                                "placeholder":  "Loading...",
+                                "label":  "Email address validation",
+                                "pattern":  "^Valid.*",
+                                "placeholder":  "Email address will be validated on uniqnueness in Exchange On-Premises",
+                                "required":  true,
+                                "useDependOn":  false,
+                                "dependOn":  "externalEmailAddress",
                                 "useDataSource":  true,
                                 "dataSourceConfig":  {
                                                          "dataSourceGuid":  "$dataSourceGuid_1",
                                                          "input":  {
                                                                        "propertyInputs":  [
                                                                                               {
-                                                                                                  "propertyName":  "externalemailaddress",
+                                                                                                  "propertyName":  "mailaddress",
                                                                                                   "otherFieldValue":  {
                                                                                                                           "otherFieldKey":  "externalEmailAddress"
                                                                                                                       }
@@ -68,22 +131,10 @@
                                                                                           ]
                                                                    }
                                                      },
-                                "displayField":  "Result"
+                                "displayField":  "output",
+                                "readonly":  true
                             },
-        "className":  "textarea-resize-vert",
-        "type":  "textarea",
-        "summaryVisibility":  "Show",
-        "requiresTemplateOptions":  true,
-        "requiresKey":  true,
-        "requiresDataSource":  false
-    },
-    {
-        "key":  "displayname",
-        "templateOptions":  {
-                                "label":  "Display Name",
-                                "required":  true,
-                                "minLength":  2
-                            },
+        "hideExpression":  "!model[\"externalEmailAddress\"]",
         "type":  "input",
         "summaryVisibility":  "Show",
         "requiresTemplateOptions":  true,
@@ -105,32 +156,35 @@
         "requiresDataSource":  false
     },
     {
-        "key":  "firstname",
+        "key":  "aliasValidation",
         "templateOptions":  {
-                                "label":  "First name"
+                                "label":  "Alias validation",
+                                "placeholder":  "Alias will be validated on uniqnueness in Exchange On-Premises",
+                                "pattern":  "^Valid.*",
+                                "readonly":  true,
+                                "useDataSource":  true,
+                                "dataSourceConfig":  {
+                                                         "dataSourceGuid":  "$dataSourceGuid_2",
+                                                         "input":  {
+                                                                       "propertyInputs":  [
+                                                                                              {
+                                                                                                  "propertyName":  "alias",
+                                                                                                  "otherFieldValue":  {
+                                                                                                                          "otherFieldKey":  "alias"
+                                                                                                                      }
+                                                                                              },
+                                                                                              {
+                                                                                                  "propertyName":  "externalEmailAddress",
+                                                                                                  "otherFieldValue":  {
+                                                                                                                          "otherFieldKey":  "externalEmailAddress"
+                                                                                                                      }
+                                                                                              }
+                                                                                          ]
+                                                                   }
+                                                     },
+                                "displayField":  "output"
                             },
-        "type":  "input",
-        "summaryVisibility":  "Show",
-        "requiresTemplateOptions":  true,
-        "requiresKey":  true,
-        "requiresDataSource":  false
-    },
-    {
-        "key":  "initials",
-        "templateOptions":  {
-                                "label":  "Initials"
-                            },
-        "type":  "input",
-        "summaryVisibility":  "Show",
-        "requiresTemplateOptions":  true,
-        "requiresKey":  true,
-        "requiresDataSource":  false
-    },
-    {
-        "key":  "lastname",
-        "templateOptions":  {
-                                "label":  "Last name"
-                            },
+        "hideExpression":  "!model[\"alias\"]",
         "type":  "input",
         "summaryVisibility":  "Show",
         "requiresTemplateOptions":  true,
