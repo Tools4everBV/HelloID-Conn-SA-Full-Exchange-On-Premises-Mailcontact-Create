@@ -6,7 +6,7 @@ $mailContactDisplayName = $form.displayName
 $mailContactAlias = $form.alias
 $mailContactPrimarySmtpAddress = $form.externalEmailAddress
 $mailContactAlias = $form.alias
-$blnHiddenFromAddressList = [System.Convert]::ToBoolean($form.hidefromaddresslist)
+$blnHiddenFromAddressList = if ([string]::IsNullOrWhiteSpace($form.hidefromaddresslist)) { $false } else { [System.Convert]::ToBoolean($form.hidefromaddresslist) }
 
 # Global variables
 # Outcommented as these are set from Global Variables
